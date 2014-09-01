@@ -1,0 +1,108 @@
+public with sharing class RetrieveDataController {
+ 
+@TestVisible private static Map<String, Schema.SObjectType> m_allObjects = Schema.getGlobalDescribe();
+ 
+public RetrieveDataController()
+ {
+ }
+ 
+/**
+ *This is the method that will be called recursively from the "client" simulating the different executes of the batch job.
+ *The method will be call till there are no more objectTypes && no more data.
+ *Controlling if we need to come back again with a internal variable in a new class Boolean MyDataMap.stillDataForRetrieving
+ *
+ * Remember to link this method with the correct one and don't create the logic here instead the API- service class. Don't forget Developer X <span class="wp-smiley emoji emoji-wink" title=";-)">;-)</span>
+ *
+ **/
+ @RemoteAction
+ public static MydataMap loadData(String objectType, List<Id> recordIdsAlreadyProcessed)
+ {
+     //******* objectType continues as string only for prototyping porpuses!!!!*****//
+     //*** The correct way is use Schema.sObjectType
+     //**** @TestVisible private static Map<String, Schema.SObjectType> m_allObjects =           Schema.getGlobalDescribe();*******//
+     //*** Schema.sObjectType tableToQuery = m_allObjects.get( objectType );
+ 
+     MyDataMap dataMap = new MyDataMap();
+     List<DraftObject__c> newRecords = new List<DraftObject__c>();
+     List<Id> recordIdsFromRecordTypeAlreadyQueried = new List<Id>();
+ 
+     // retrieve the data for this object type
+     if( objectType == null )
+         throw new AppRetrieveException(' No recordtype');
+ 
+     Schema.sObjectType tableToQuery = m_allObjects.get( objectType );
+     if(tableToQuery==null)
+        throw new AppRetrieveException(' Incorrect recordtype');
+ 
+     //In order to don't retrieve the same records twice I set in my query the records already retrieved
+List<SObject> records= new List<SObject> ( Database.query('SELECT Id, Name FROM ' + objectType + ' WHERE Id      NOT IN :recordIdsAlreadyProcessed LIMIT 10000') ) ; // The real limit will be 10K
+ 
+     if(records!=null)
+     {
+        //update the structure to be returned
+        datamap.records.addAll(records);
+        //create the draft records from records queried before. Draft will be save in database to don't loose the processed records
+        for(SObject record :records)
+        {
+            /***
+            *** here we can process the records
+            *** do the calculations and later on set them on the draft object
+            ***/
+ 
+            // you can check here which record type are you using to insert in the correct Lookup field
+            /// here I'm going to populate the lookup field that is in Draft__c object
+            // DraftObject is going to be linked to the records that are being procesing
+            DraftObject__c newDraft ;
+            if(objectType == 'Account') //**Remember to use Schema.sObjectType <span class="wp-smiley emoji emoji-smile" title=":)">:)</span> !!!
+            {
+               Id recordId=(Id)record.get('Id');
+               newDraft = new DraftObject__c(Account__c = recordId);
+               recordIdsFromRecordTypeAlreadyQueried.add(recordId);
+            }
+            else
+            {
+               Id recordId=(Id)record.get('Id');
+               newDraft = new DraftObject__c(Transaction__c = recordId);
+               recordIdsFromRecordTypeAlreadyQueried.add(recordId);
+            }
+ 
+            newRecords.add(newDraft);
+         }
+ 
+         if(!newRecords.isEmpty())
+         {
+            insert newRecords; // maximum insert 10K
+            datamap.drafts.addAll(newRecords);
+            datamap.recordIdsAlreadyProcessed.addAll(recordIdsFromRecordTypeAlreadyQueried);
+         }
+     }
+ 
+     // check if there is still data to retrieve
+     //to check I'll do another query and retrieve 1 record more
+     List<SObject> stillAnotherRecord = new List<SObject> ( Database.query('Select Id, Name From '+ objectType + ' WHERE Id NOT IN :recordIdsFromRecordTypeAlreadyQueried LIMIT 1') ) ;
+ 
+     if(stillAnotherRecord != null && !stillAnotherRecord.isEmpty())
+         datamap.stillDataForRetrieving = true;
+ 
+     return dataMap;
+  }
+ 
+  /**
+  * Remember this class is only for Prototype purposes , modify it to make it suitable to your use cases
+  */
+  public class MyDataMap
+  {
+     public Boolean stillDataForRetrieving = false;
+     public List<SObject> records = new List<SObject>(); // possible data that the JS could need??
+     public List<DraftObject__c> drafts = new List<DraftObject__c>(); //possible data that the JS could need
+     // however if you don't need it don't use it, might be you only need IDs...
+     public List<Id> recordIdsAlreadyProcessed = new List<Id> ();
+ 
+     public MyDataMap()
+     {
+ 
+     }
+  }
+ 
+  public class AppRetrieveException extends Exception{}
+}
