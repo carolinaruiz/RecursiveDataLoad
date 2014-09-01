@@ -1,0 +1,99 @@
+<apex:page showHeader="false" sidebar="false"
+           controller="RetrieveDataController">
+ 
+        <script src="{!URLFOR($Resource.jqm,'js/jquery-1.9.1.min.js')}"></script>
+        <script src="{!URLFOR($Resource.jqm,'js/jquery.mobile-1.3.2.min.js')}"></script>
+ 
+ <script>
+    var $j = window.jQuery.noConflict();
+        $j(document).ready(function() {
+ 
+            init();
+ 
+            regBtnClickHandlers();
+ 
+        });
+ 
+    var recordTypes ;
+    var iterator;
+    var nextRecordType;
+   // var alreadyProcessedINWholeProcess = new Array();
+    var alreadyProcessedINWholeProcess;
+ 
+    function init()
+    {
+        debugger;
+        //we will initialise the recordTypes that I'll need later
+        recordTypes = new Array( "Account", "Transaction__c" ); // in the example only 2
+        //**********
+        //**** TAKE CARE WHICH RECORD TYPER YOU CHOOSE AS LATER ON WE WILL CREATE RECORDS IN DRAFT
+        //**** THEN IF YOU CHOOSE DRAFT WILL BE A NEVER END!! INFINITE RECURSIVITY
+        //**********
+ 
+        iterator = recordTypes.length -1 ;
+        nextRecordType = recordTypes[iterator];
+        alreadyProcessedINWholeProcess = new Array();
+ 
+    }
+ 
+    regBtnClickHandlers();
+    function regBtnClickHandlers() {
+      $j('#retrieveData').click(function(e) {
+        clickButton();
+      });
+    }
+ 
+    function clickButton()
+    {
+        retrieveData(nextRecordType);
+ 
+    }
+ 
+    function retrieveData(recordType, recordsProcessed)
+    {
+        debugger;
+        var back=false;
+ 
+        var alreadyProcessed = [];
+ 
+        if(recordsProcessed != null && recordsProcessed.length != 0)
+            alreadyProcessed.push(recordsProcessed);
+ 
+         Visualforce.remoting.Manager.invokeAction('{!$RemoteAction.RetrieveDataController.loadData}',
+            nextRecordType , alreadyProcessed, function(result, event)
+        {
+            //retrieving the data that is storage in my result
+            debugger;
+ 
+            //Read through the result
+            var recordsArray = result.drafts;
+            var recordsArray = result.records;
+            alreadyProcessed.push(result.recordIdsAlreadyProcessed); // this records will be storage
+            alreadyProcessedINWholeProcess.push(alreadyProcessed); // -- they will be the same , however I would like to separate the idea of the global to the whole script and the use in the recursivity
+ 
+            //update dataToBeRetrieve with the result
+ 
+            if(iterator > 0)
+            {
+                if( !result.stillDataForRetrieving )
+                {
+                    iterator -- ;
+                    nextRecordType = recordTypes[iterator];
+                    retrieveData(nextRecordType, alreadyProcessed);
+ 
+                }
+                else
+                {
+                    alreadyProcessed.length = 0;
+                    retrieveData(nextRecordType,alreadyProcessed);
+                }
+            }
+ 
+        });
+    }
+ 
+ </script>
+ 
+      <a href="#" data-role="button" id="retrieveData" >Retrieve Data</a>
+ 
+</apex:page>
